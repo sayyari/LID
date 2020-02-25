@@ -331,6 +331,29 @@ def writeCSV(file,elem,soln,deg,body=[],marker=[]):
             file.write(line)
     file.close()
 
+def writeCSVDict(file,nodes,solution,deg,boundary=[],marker=[]):
+    
+    # must be marked for the new grid by ssdc
+    # with a one step run on the mesh
+    if len(marker) == 0 and len(body) == 0:
+        boundary = np.zeros(len(nodes), dtype = int)
+        marker   = np.zeros(len(nodes), dtype = int)
+
+    # Write the CSV file
+    file = open(file,"a")
+    header = "Elements, Points\n"
+    file.write(header)
+    file.write("{}, {}\n".format(int(len(nodes)/(deg[0]+1)**2), len(nodes)))
+    header = "X, Y, BODY, BLAYER, RHO, U, V, TEMP, ELEM, Deg\n"
+    file.write(header)
+
+    x, y = nodes.T
+    density, Xvel, Yvel, temp = solution.T
+    for i in range(len(nodes)):
+        line = "{}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(x[i],y[i],marker[i], boundary[i],density[i],Xvel[i],Yvel[i],temp[i],int(np.floor(i/(deg[0]+1)**2)),deg[0])
+        file.write(line)
+    file.close()
+
 #################################################
 ################ Interpolation ##################
 #################################################
@@ -346,7 +369,7 @@ def elem2data(elem):
     return np.array(dataElem)
 
 # Return node, solution and degrees in a node form
-def elem2data():
+def elem2data(elem):
     
     nodes = []
     solutions = []
@@ -462,10 +485,8 @@ def mapP2Q(obj,deg,q):
 # input:
 # - elem [global] is a dictionary of each element.
 # - q is the desired degree of accuracy
-def mapP2Q(q):
-    
-    global elem
-    
+def mapP2Q(elem,q):
+        
     nel = len(elem)
     for e in range(nel):
 
@@ -511,6 +532,8 @@ def mapP2Q(q):
         newSoln = edges2quad(tempA)
 
         elem[e] = (newNodes,newSoln,q,elem[e][3])
+
+    return elem
         
 
 # The main function for visualizing the whole domain
