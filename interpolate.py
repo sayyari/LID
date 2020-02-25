@@ -138,6 +138,46 @@ def loadDat(solutionData, gridData, bodyData=""):
         
     return elem, sln, deg, step, time
 
+import sys,os
+sys.path.insert(0,os.environ['SSDC_DIR']+"/lib/ssdc/python")
+from ssdc.io import *
+
+# Load data from ssdc data files and populate a dictionary
+def loadDatDict(solutionData, gridData, bodyData=""):
+    
+    # Load grid data
+    io = IO().open(gridData)
+    grid = io.load()
+    deg, nodes = grid
+    
+    # Load solution data
+    io = IO().open(solutionData)
+    state = io.load()
+    step, time, soln = state
+    soln.shape = (nodes.shape[0], -1)
+    
+    crd = []
+    sln = []
+    elem = {}
+    for i in range(len(deg)):
+        crd += [nodes[i*(deg[i]+1)**2:(i+1)*(deg[i]+1)**2]]
+        sln += [soln[i*(deg[i]+1)**2:(i+1)*(deg[i]+1)**2]]
+        elem[i] = (nodes[i*(deg[i]+1)**2:(i+1)*(deg[i]+1)**2]
+                  ,soln[i*(deg[i]+1)**2:(i+1)*(deg[i]+1)**2]
+                  ,deg[i], "f")
+        
+    # Load body data
+    if bodyData != "":
+        body = np.loadtxt(bodyData, dtype=int)
+        marker = np.zeros(nodes.shape[0], dtype=int)
+        marker[body] = 1
+        side = sideMarker(marker,len(deg))
+        for i in range(len(deg)):
+            elem[i] = (elem[i][0],elem[i][1],elem[i][2]
+                      ,side[i])
+        
+    return elem, step, time
+
 # Load a CSV file
 def loadCSV(file):
     
@@ -305,6 +345,18 @@ def elem2data(elem):
 
     return np.array(dataElem)
 
+# Return node, solution and degrees in a node form
+def elem2data():
+    
+    nodes = []
+    solutions = []
+    deg = []
+    for e in range(len(elem)):
+        nodes += list(elem[e][0])
+        solutions += list(elem[e][1])
+        deg += [elem[e][2]]
+    return np.array(nodes), np.array(solutions), deg
+
 # Chop an element into edges
 # in direction A (rows)
 def quad2edgesA(element):
@@ -405,6 +457,61 @@ def mapP2Q(obj,deg,q):
         newDeg += [q]
 
     return newObj, newDeg
+
+# The main function for interpolating the whole domain while keeping the marker structure
+# input:
+# - elem [global] is a dictionary of each element.
+# - q is the desired degree of accuracy
+def mapP2Q(q):
+    
+    global elem
+    
+    nel = len(elem)
+    for e in range(nel):
+
+        # Interpolate in direction 
+        edgesA = quad2edgesA(elem[e][0])
+        newA = []
+        for i in range(len(edgesA)):
+            tmp = []
+            for j in range(len(edgesA[i])):
+                tmp += [interpolate(edgesA[i][j],elem[e][2],q)[1]]
+            newA += [np.array(tmp)]
+        newNodes = edges2quad(newA)
+        
+        edgesA = quad2edgesA(elem[e][1])
+        newA = []
+        for i in range(len(edgesA)):
+            tmp = []
+            for j in range(len(edgesA[i])):
+                tmp += [interpolate(edgesA[i][j],elem[e][2],q)[1]]
+            newA += [np.array(tmp)]
+        newSoln = edges2quad(newA)
+
+        edgesB = quad2edgesB(newNodes)
+        newB = []
+        for i in range(len(edgesB)):
+            tmp = []
+            for j in range(len(edgesB[i])):
+                tmp += [interpolate(edgesB[i][j],elem[e][2],q)[1]]
+            newB += [np.array(tmp)]
+        tempNodes = edges2quad(newB)
+        tempA = quad2edgesB(tempNodes)
+        newNodes = edges2quad(tempA)
+        
+        edgesB = quad2edgesB(newSoln)
+        newB = []
+        for i in range(len(edgesB)):
+            tmp = []
+            for j in range(len(edgesB[i])):
+                tmp += [interpolate(edgesB[i][j],elem[e][2],q)[1]]
+            newB += [np.array(tmp)]
+        tempSoln = edges2quad(newB)
+        tempA = quad2edgesB(tempSoln)
+        newSoln = edges2quad(tempA)
+
+        elem[e] = (newNodes,newSoln,q,elem[e][3])
+        
 
 # The main function for visualizing the whole domain
 # input:
